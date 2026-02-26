@@ -1,34 +1,41 @@
 # backend/taste_propagation.py
-from db import get_session
-from neo4j import GraphDatabase
 
-NEO4J_URI = "neo4j://127.0.0.1:7687"
-NEO4J_USER = "neo4j"
-NEO4J_PASSWORD = "12345678"
+from db import get_session
 
 
 def propagate_taste(user_id: str):
     """
-    Propagate user taste from liked movies to actors, directors, and keywords.
-    This function is SAFE to import in FastAPI.
+    Propagate user taste from liked movies
+    to actors, directors, and keywords.
+
+    Converts:
+        (User)-[:LIKED]->(Movie)
+    into weighted preference edges like:
+        (User)-[:LIKES_ACTOR]->(Actor)
+        (User)-[:LIKES_DIRECTOR]->(Director)
+        (User)-[:LIKES_KEYWORD]->(Keyword)
     """
 
-    driver = GraphDatabase.driver(
-        NEO4J_URI,
-        auth=(NEO4J_USER, NEO4J_PASSWORD)
-    )
-
     queries = [
-        # Actors
+
+        # =====================================================
+        # Actor propagation
+        # Top-billed actors weighted more
+        # =====================================================
         """
         MATCH (u:User {userId: $userId})-[r:LIKED]->(m:Movie)<-[aRel:ACTED_IN]-(a:Actor)
         WITH u, a,
-             CASE WHEN aRel.order <= 2 THEN 0.6 ELSE 0.3 END * r.weight AS score
+             CASE 
+                 WHEN aRel.order <= 2 THEN 0.6 
+                 ELSE 0.3 
+             END * r.weight AS score
         MERGE (u)-[p:LIKES_ACTOR]->(a)
         SET p.weight = coalesce(p.weight, 0) + score
         """,
 
-        # Directors
+        # =====================================================
+        # Director propagation
+        # =====================================================
         """
         MATCH (u:User {userId: $userId})-[r:LIKED]->(m:Movie)<-[:DIRECTED]-(d:Director)
         WITH u, d, r.weight * 1.0 AS score
@@ -36,7 +43,9 @@ def propagate_taste(user_id: str):
         SET p.weight = coalesce(p.weight, 0) + score
         """,
 
-        # Keywords
+        # =====================================================
+        # Keyword propagation
+        # =====================================================
         """
         MATCH (u:User {userId: $userId})-[r:LIKED]->(m:Movie)-[:HAS_KEYWORD]->(k:Keyword)
         WITH u, k, r.weight * 0.4 AS score
@@ -46,7 +55,5 @@ def propagate_taste(user_id: str):
     ]
 
     with get_session() as session:
-        for q in queries:
-            session.run(q, userId=user_id)
-
-    driver.close()
+        for query in queries:
+            session.run(query, userId=user_id)

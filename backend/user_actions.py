@@ -1,16 +1,17 @@
 from datetime import datetime, timezone
 from db import get_session
+from taste_propagation import propagate_taste
 
-# ---------------------------
-# User management
-# ---------------------------
+
+# =====================================================
+# User Management
+# =====================================================
 
 def verify_or_create_user(username: str) -> bool:
     """
-    Ensures a User node exists.
-    Idempotent operation.
+    Ensure a User node exists.
+    Safe and idempotent.
     """
-    print("verifying or creating user:", username)
     create_user(username)
     return True
 
@@ -23,11 +24,15 @@ def create_user(user_id: str) -> None:
         session.run(query, userId=user_id)
 
 
-# ---------------------------
-# Movie preference actions
-# ---------------------------
+# =====================================================
+# Movie Preference Actions
+# =====================================================
 
 def like_movie(user_id: str, movie_title: str, weight: float = 1.0) -> None:
+    """
+    Store positive movie preference.
+    Triggers taste propagation.
+    """
     query = """
     MATCH (u:User {userId: $userId})
     MERGE (m:Movie {title: $title})
@@ -35,6 +40,7 @@ def like_movie(user_id: str, movie_title: str, weight: float = 1.0) -> None:
     SET r.weight = $weight,
         r.timestamp = $timestamp
     """
+
     with get_session() as session:
         session.run(
             query,
@@ -44,8 +50,14 @@ def like_movie(user_id: str, movie_title: str, weight: float = 1.0) -> None:
             timestamp=datetime.now(timezone.utc).isoformat(),
         )
 
+    # 🔥 Propagate taste after liking a movie
+    propagate_taste(user_id)
+
 
 def dislike_movie(user_id: str, movie_title: str, weight: float = -1.0) -> None:
+    """
+    Store negative movie preference.
+    """
     query = """
     MATCH (u:User {userId: $userId})
     MERGE (m:Movie {title: $title})
@@ -53,6 +65,7 @@ def dislike_movie(user_id: str, movie_title: str, weight: float = -1.0) -> None:
     SET r.weight = $weight,
         r.timestamp = $timestamp
     """
+
     with get_session() as session:
         session.run(
             query,
@@ -63,17 +76,18 @@ def dislike_movie(user_id: str, movie_title: str, weight: float = -1.0) -> None:
         )
 
 
-# ---------------------------
-# Manual test
-# ---------------------------
+# =====================================================
+# Manual Test
+# =====================================================
+
 if __name__ == "__main__":
-    user = "user_3"
+    user = "vstest"
 
     verify_or_create_user(user)
 
-    like_movie(user, "Witchboard", 1.0)
+    like_movie(user, "Witchboard")
     like_movie(user, "The Twilight Saga: Breaking Dawn - Part 2", 0.8)
-    like_movie(user, "The Mortal Instruments: City of Bones", 1.0)
-    dislike_movie(user, "Transformers", -1.0)
+    like_movie(user, "The Mortal Instruments: City of Bones")
+    dislike_movie(user, "Transformers")
 
     print("User movie preferences stored successfully.")

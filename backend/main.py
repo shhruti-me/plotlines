@@ -1,19 +1,32 @@
+#new
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import List
+from db import close_driver
+from contextlib import asynccontextmanager
 
 from nlp_preferences import extract_preferences, store_text_preferences
-from user_actions import (
-    verify_or_create_user,
-    like_movie,
-    dislike_movie,
-)
+from user_actions import verify_or_create_user, like_movie, dislike_movie
 from recommend import recommend_movies
 
-# ---------------------------
-# App setup
-# ---------------------------
-app = FastAPI()
+# =====================================================
+# Lifespan Handler
+# =====================================================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    close_driver()
+
+# =====================================================
+# App Initialization (ONLY ONCE)
+# =====================================================
+
+app = FastAPI(
+    title="Movie Recommendation API",
+    lifespan=lifespan
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,9 +41,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------------------
-# Schemas
-# ---------------------------
+# =====================================================
+# Request Schemas
+# =====================================================
+
 class UserRequest(BaseModel):
     username: str
 
@@ -42,13 +56,12 @@ class TextPreferenceRequest(BaseModel):
 
 class MovieListRequest(BaseModel):
     username: str
-    liked: list[str]
-    disliked: list[str]
+    liked: List[str]
+    disliked: List[str]
 
-
-# ---------------------------
+# =====================================================
 # Routes
-# ---------------------------
+# =====================================================
 
 @app.post("/user/verify")
 def verify_user(data: UserRequest):
@@ -61,41 +74,26 @@ def verify_user(data: UserRequest):
 
 @app.post("/preferences/text")
 def text_preferences(data: TextPreferenceRequest):
-    print("TEXT PREF RECEIVED:", data.username, data.text)
-
-    # Ensure user exists
     verify_or_create_user(data.username)
 
-    # NLP → graph
-    prefs = extract_preferences(data.text)
-    store_text_preferences(data.username, prefs)
+    preferences = extract_preferences(data.text)
+    store_text_preferences(data.username, preferences)
 
-    # Recommend
     recommendations = recommend_movies(data.username)
 
-    return {
-        "recommendations": recommendations
-    }
+    return {"recommendations": recommendations}
 
 
 @app.post("/preferences/list")
 def list_preferences(data: MovieListRequest):
-    print("LIST PREF RECEIVED:", data.username, data.liked, data.disliked)
-
-    # Ensure user exists
     verify_or_create_user(data.username)
 
-    # Persist likes
     for movie in data.liked:
         like_movie(data.username, movie)
 
-    # Persist dislikes
     for movie in data.disliked:
         dislike_movie(data.username, movie)
 
-    # Recommend
     recommendations = recommend_movies(data.username)
 
-    return {
-        "recommendations": recommendations
-    }
+    return {"recommendations": recommendations}

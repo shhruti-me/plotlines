@@ -1,67 +1,87 @@
 import spacy
 from db import get_session
 
-# ---------------------------
-# NLP model
-# ---------------------------
+# =====================================================
+# NLP Model
+# =====================================================
+
 nlp = spacy.load("en_core_web_sm")
 
-# ---------------------------
-# Controlled vocabularies
-# ---------------------------
-GENRES = {
-    "action",
-    "comedy",
-    "drama",
-    "thriller",
-    "romance",
-    "romantic",        # 👈 IMPORTANT synonym fix
-    "science fiction",
-    "sci-fi",
-    "horror",
-    "fantasy",
+# =====================================================
+# Configuration
+# =====================================================
+
+# Canonical genre mapping (handles synonyms + multi-word genres)
+GENRE_MAP = {
+    "action": "Action",
+    "comedy": "Comedy",
+    "drama": "Drama",
+    "thriller": "Thriller",
+    "romance": "Romance",
+    "romantic": "Romance",
+    "horror": "Horror",
+    "fantasy": "Fantasy",
+    "science fiction": "Science Fiction",
+    "sci-fi": "Science Fiction",
 }
 
 NEGATIONS = {"not", "don't", "dont", "hate", "dislike"}
 POSITIVE_VERBS = {"like", "love", "enjoy", "prefer"}
 
-# Normalize genre tokens
-GENRE_NORMALIZATION = {
-    "romantic": "Romance",
-    "romance": "Romance",
-    "sci-fi": "Science Fiction",
-    "science fiction": "Science Fiction",
-}
+WINDOW_SIZE = 4  # Context window size for sentiment detection
 
 
-# ---------------------------
-# Preference extraction
-# ---------------------------
+# =====================================================
+# Preference Extraction
+# =====================================================
+
 def extract_preferences(text: str) -> dict:
+    """
+    Extract:
+    - Liked genres
+    - Disliked genres
+    - Actor names (PERSON entities)
+
+    Uses phrase-level detection for multi-word genres.
+    """
+
     doc = nlp(text.lower())
+    full_text = doc.text
 
     liked_genres = set()
     disliked_genres = set()
     people = set()
 
-    # Extract people (actors)
+    # ---------------------------
+    # Extract actor names
+    # ---------------------------
     for ent in doc.ents:
         if ent.label_ == "PERSON":
             people.add(ent.text.title())
 
     tokens = [t.text for t in doc]
 
-    # Genre sentiment detection
-    for i, token in enumerate(tokens):
-        window = tokens[max(0, i - 3): i + 3]
+    # ---------------------------
+    # Genre detection
+    # ---------------------------
+    for genre_phrase, canonical_name in GENRE_MAP.items():
 
-        if token in GENRES:
-            genre = GENRE_NORMALIZATION.get(token, token.title())
+        if genre_phrase in full_text:
 
-            if any(w in NEGATIONS for w in window):
-                disliked_genres.add(genre)
-            elif any(w in POSITIVE_VERBS for w in window):
-                liked_genres.add(genre)
+            # Find token index of first occurrence
+            for i, token in enumerate(tokens):
+
+                # Match first word of phrase
+                if token == genre_phrase.split()[0]:
+
+                    # Build window
+                    window = tokens[max(0, i - WINDOW_SIZE): i + WINDOW_SIZE]
+
+                    if any(w in NEGATIONS for w in window):
+                        disliked_genres.add(canonical_name)
+
+                    elif any(w in POSITIVE_VERBS for w in window):
+                        liked_genres.add(canonical_name)
 
     return {
         "liked_genres": liked_genres,
@@ -70,14 +90,19 @@ def extract_preferences(text: str) -> dict:
     }
 
 
-# ---------------------------
-# Preference persistence
-# ---------------------------
+# =====================================================
+# Preference Persistence
+# =====================================================
+
 def store_text_preferences(username: str, prefs: dict) -> None:
     """
-    Persist NLP-extracted preferences to Neo4j with weights.
-    Guarantees user existence.
+    Persist NLP-extracted preferences into Neo4j.
+
+    - Likes increase weight
+    - Dislikes decrease weight
+    - Actor preferences strongly weighted
     """
+
     query = """
     MERGE (u:User {userId: $username})
 
@@ -112,25 +137,29 @@ def store_text_preferences(username: str, prefs: dict) -> None:
             people=list(prefs["people"]),
         )
 
-        # Force execution & visibility
+        # Force execution
         result.consume()
 
 
-# ---------------------------
-# Manual test
-# ---------------------------
-if __name__ == "__main__":
-    user_id = "user_4"
+# =====================================================
+# Manual Test
+# =====================================================
 
-    text = (
+if __name__ == "__main__":
+
+    test_user = "vstest"
+
+    sample_text = (
         "I love emotional romantic movies, "
         "but I don't like too much action. "
         "I enjoy Jamie Campbell Bower and Tom Hiddleston."
     )
 
-    prefs = extract_preferences(text)
-    print("EXTRACTED PREFS:", prefs)
+    extracted = extract_preferences(sample_text)
 
-    store_text_preferences(user_id, prefs)
+    print("Extracted Preferences:")
+    print(extracted)
 
-    print("NLP preferences stored successfully.")
+    store_text_preferences(test_user, extracted)
+
+    print("Preferences stored successfully.")

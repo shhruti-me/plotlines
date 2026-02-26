@@ -1,25 +1,44 @@
 from db import get_session
 
-# ---------------------------
+# =====================================================
+# Recommendation Configuration
+# =====================================================
+
+WEIGHTS = {
+    "actor": 0.35,
+    "director": 0.30,
+    "genre": 0.15,
+    "keyword": 0.10,
+    "dislike": 0.25,
+    "popularity": 0.05,
+}
+
+
+# =====================================================
 # Recommendation Engine
-# ---------------------------
+# =====================================================
 
 def recommend_movies(user_id: str, limit: int = 10):
     """
-    Graph-based hybrid recommender using:
-    - weighted user preferences
-    - movie metadata
-    - popularity smoothing
+    Hybrid graph-based recommendation engine.
+
+    Combines:
+    - User preference weights (actor, director, genre, keyword)
+    - Genre dislike penalties
+    - Popularity smoothing using log-scaled vote count
+
+    Returns:
+        List of (movie_title, score)
     """
 
-    query = """
-    MATCH (u:User {userId: $userId})
+    query = f"""
+    MATCH (u:User {{userId: $userId}})
 
     // Candidate movies
     MATCH (m:Movie)
     WHERE NOT (u)-[:LIKED|DISLIKED]->(m)
 
-    // Actor preference (support both edge directions)
+    // Actor preference
     OPTIONAL MATCH (u)-[ua:LIKES_ACTOR]->(a:Actor)
     OPTIONAL MATCH (a)-[:ACTED_IN]->(m)
     OPTIONAL MATCH (m)-[:ACTED_IN]->(a)
@@ -37,20 +56,20 @@ def recommend_movies(user_id: str, limit: int = 10):
     OPTIONAL MATCH (u)-[uk:LIKES_KEYWORD]->(k:Keyword)<-[:HAS_KEYWORD]-(m)
 
     WITH m,
-         sum(coalesce(ua.weight, 0))        AS actorScore,
-         sum(coalesce(ud.weight, 0))        AS directorScore,
-         sum(coalesce(ug.weight, 0))        AS genreScore,
-         sum(coalesce(dg.weight, 0))        AS dislikePenalty,
-         sum(coalesce(uk.weight, 0))        AS keywordScore,
-         coalesce(m.voteCount, 0)           AS voteCount
+         sum(coalesce(ua.weight, 0)) AS actorScore,
+         sum(coalesce(ud.weight, 0)) AS directorScore,
+         sum(coalesce(ug.weight, 0)) AS genreScore,
+         sum(coalesce(dg.weight, 0)) AS dislikePenalty,
+         sum(coalesce(uk.weight, 0)) AS keywordScore,
+         coalesce(m.voteCount, 0)    AS voteCount
 
     WITH m,
-         (actorScore    * 0.35) +
-         (directorScore * 0.30) +
-         (genreScore    * 0.15) +
-         (keywordScore  * 0.10) +
-         (dislikePenalty * 0.25) +
-         (log10(voteCount + 1) * 0.05)      AS score
+         (actorScore    * {WEIGHTS["actor"]}) +
+         (directorScore * {WEIGHTS["director"]}) +
+         (genreScore    * {WEIGHTS["genre"]}) +
+         (keywordScore  * {WEIGHTS["keyword"]}) +
+         (dislikePenalty * {WEIGHTS["dislike"]}) +
+         (log10(voteCount + 1) * {WEIGHTS["popularity"]}) AS score
 
     RETURN
         m.title AS title,
@@ -72,12 +91,13 @@ def recommend_movies(user_id: str, limit: int = 10):
         ]
 
 
-# ---------------------------
-# Manual test
-# ---------------------------
-if __name__ == "__main__":
-    user = "user_1"
-    recs = recommend_movies(user)
+# =====================================================
+# Manual Test
+# =====================================================
 
-    for title, score in recs:
+if __name__ == "__main__":
+    test_user = "vstest"
+    recommendations = recommend_movies(test_user)
+
+    for title, score in recommendations:
         print(f"{title} -> {score}")
