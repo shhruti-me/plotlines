@@ -1,7 +1,6 @@
-import { useState } from "react";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus, X, ThumbsUp, ThumbsDown, Send } from "lucide-react";
+import { X, ThumbsUp, ThumbsDown, Send } from "lucide-react";
+import MovieAutocomplete from "@/components/MovieAutocomplete";
 
 interface MovieListInputProps {
   likedMovies: string[];
@@ -22,23 +21,6 @@ const MovieListInput = ({
   onRemoveDisliked,
   onSubmit,
 }: MovieListInputProps) => {
-  const [likedInput, setLikedInput] = useState("");
-  const [dislikedInput, setDislikedInput] = useState("");
-
-  const handleAddLiked = () => {
-    if (likedInput.trim()) {
-      onAddLiked(likedInput.trim());
-      setLikedInput("");
-    }
-  };
-
-  const handleAddDisliked = () => {
-    if (dislikedInput.trim()) {
-      onAddDisliked(dislikedInput.trim());
-      setDislikedInput("");
-    }
-  };
-
   const hasMovies = likedMovies.length > 0 || dislikedMovies.length > 0;
 
   return (
@@ -49,18 +31,7 @@ const MovieListInput = ({
           <ThumbsUp className="h-4 w-4" />
           Movies you liked
         </label>
-        <div className="flex gap-2">
-          <Input
-            placeholder="Enter movie title..."
-            value={likedInput}
-            onChange={(e) => setLikedInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleAddLiked()}
-            className="bg-background border-border focus:ring-1 focus:ring-foreground"
-          />
-          <Button variant="outline" size="icon" onClick={handleAddLiked}>
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div>
+        <MovieAutocomplete placeholder="Search liked movie..." onSelect={onAddLiked} />
         <div className="flex flex-wrap gap-2">
           {likedMovies.map((movie) => (
             <span
@@ -82,18 +53,7 @@ const MovieListInput = ({
           <ThumbsDown className="h-4 w-4" />
           Movies you disliked
         </label>
-        <div className="flex gap-2">
-          <Input
-            placeholder="Enter movie title..."
-            value={dislikedInput}
-            onChange={(e) => setDislikedInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleAddDisliked()}
-            className="bg-background border-border focus:ring-1 focus:ring-foreground"
-          />
-          <Button variant="outline" size="icon" onClick={handleAddDisliked}>
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div>
+        <MovieAutocomplete placeholder="Search disliked movie..." onSelect={onAddDisliked} />
         <div className="flex flex-wrap gap-2">
           {dislikedMovies.map((movie) => (
             <span

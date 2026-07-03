@@ -1,11 +1,10 @@
-#new
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
-from db import close_driver
 from contextlib import asynccontextmanager
 
+from db import close_driver, get_session
 from nlp_preferences import extract_preferences, store_text_preferences
 from user_actions import verify_or_create_user, like_movie, dislike_movie
 from recommend import recommend_movies
@@ -20,7 +19,7 @@ async def lifespan(app: FastAPI):
     close_driver()
 
 # =====================================================
-# App Initialization (ONLY ONCE)
+# App Initialization
 # =====================================================
 
 app = FastAPI(
@@ -31,6 +30,8 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "http://localhost:8081",
+        "http://127.0.0.1:8081",
         "http://localhost:8080",
         "http://127.0.0.1:8080",
         "http://localhost:5173",
@@ -97,3 +98,32 @@ def list_preferences(data: MovieListRequest):
     recommendations = recommend_movies(data.username)
 
     return {"recommendations": recommendations}
+
+
+# =====================================================
+# Movie Autocomplete Search (NEW)
+# =====================================================
+@app.get("/search")
+def search_movies(q: str = Query(..., min_length=2)):
+    with get_session() as session:
+        result = session.run(
+            """
+            MATCH (m:Movie)
+            WHERE toLower(m.title) CONTAINS toLower($q)
+            RETURN id(m) AS id, m.title AS title, m.posterPath AS posterPath
+            LIMIT 10
+            """,
+            q=q
+        )
+
+        movies = []
+
+        for record in result:
+            poster_path = record["posterPath"]
+            movies.append({
+                "id": record["id"],
+                "title": record["title"],
+                "poster": f"https://image.tmdb.org/t/p/w200{poster_path}" if poster_path else None
+            })
+
+        return movies
