@@ -6,9 +6,12 @@ from preprocessing.cleanup import preprocess
 # ---------------------------
 # Neo4j connection config
 # ---------------------------
-NEO4J_URI = "bolt://127.0.0.1:7687"   # <-- use bolt for local
-NEO4J_USER = "neo4j"
-NEO4J_PASSWORD = "12345678"          # your actual password
+NEO4J_URI = os.getenv("NEO4J_URI", "bolt://127.0.0.1:7687")
+NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
+
+if not NEO4J_PASSWORD:
+    raise RuntimeError("NEO4J_PASSWORD environment variable is required for ingestion")
 
 driver = GraphDatabase.driver(
     NEO4J_URI,

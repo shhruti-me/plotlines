@@ -1,0 +1,27 @@
+# Root ignore for Python and Node
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.env
+.env.*
+.venv/
+backend/.venv/
+*.sqlite3
+*.db
+*.log
+
+# Node
+node_modules/
+dist/
+*.local
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Editor
+.vscode/
+.idea/
+.DS_Store

@@ -1,10 +1,13 @@
+import os
 import requests
 import pandas as pd
 import time
-import os
 
-API_KEY = "b31c1ec950e96a963102e80d0805c837" # Make sure this is set
+API_KEY = os.getenv("TMDB_API_KEY")
 BASE_URL = "https://api.themoviedb.org/3"
+
+if not API_KEY:
+    raise RuntimeError("TMDB_API_KEY environment variable is required")
 
 session = requests.Session()
 session.headers.update({"accept": "application/json"})
